@@ -1,6 +1,6 @@
-# HTTP-con-Socket
+# Client-HTTP-con-Socket
 
-Client HTTP didattico in Python: costruisce a mano una richiesta HTTP/1.1 con
+Client HTTP in Python: costruisce a mano una richiesta HTTP/1.1 con
 un socket TCP, per mostrare come funziona davvero il protocollo.
 
 > **L'idea da portarsi a casa:** un browser, alla fine, apre una connessione
@@ -60,11 +60,11 @@ installare.
 **Sul tuo computer**
 
 ```bash
-git clone https://github.com/pwnAtl4nt1s/HTTP-con-Socket.git
+git clone https://github.com/pwnAtl4nt1s/Client-HTTP-con-Socket.git
 ```
 
 ```bash
-cd HTTP-con-Socket
+cd Client-HTTP-con-Socket
 ```
 
 Su Windows, se `python3` non viene trovato, usa `python` (o `py`) al suo posto.
@@ -288,5 +288,3 @@ semplice socket. Per questo servono siti ancora in `http://`.
 | Lo script resta fermo 5 secondi | Riga vuota mancante (prova D) | Se non hai usato `--senza-riga-vuota`, prova un altro sito |
 | `Network is unreachable` | Il sito ha anche un indirizzo IPv6 e la rete non lo supporta | Aggiorna `client_http.py`: la versione attuale usa solo IPv4 |
 | `python3: command not found` (Windows) | Su Windows il comando ha un altro nome | Usa `python` o `py` |
-
-Fonte: libro di testo.
