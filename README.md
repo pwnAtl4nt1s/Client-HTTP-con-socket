@@ -32,8 +32,7 @@ Sul tuo computer basta un doppio clic sul file.
 1. [Prima di iniziare](#1-prima-di-iniziare)
 2. [Dimostrazione](#2-dimostrazione)
 3. [Esercizio](#3-esercizio)
-4. [Spiegazione](#4-spiegazione)
-5. [Problemi frequenti](#5-problemi-frequenti)
+4. [Problemi frequenti](#5-problemi-frequenti)
 
 ---
 
@@ -211,74 +210,7 @@ Il secondo comando chiede a curl di **non** mandare la riga `Host`.
 
 - I risultati sono gli stessi delle prove A e C?
 
-### Da consegnare / raccontare
-
-In poche righe, con parole tue:
-
-1. Com'è fatta una richiesta HTTP? (Che cos'è `\r\n`?)
-2. A che cosa serve la riga vuota?
-3. Come fa il client a capire che la risposta è finita?
-
-Le risposte sono nella sezione 4: provaci prima da solo!
-
----
-
-## 4. Spiegazione
-
-### La richiesta è testo
-
-Una richiesta HTTP è fatta di righe di caratteri ASCII, ognuna chiusa da
-**`\r\n`** (*carriage return* + *line feed*, cioè "torna a inizio riga" e
-"vai a capo"):
-
-```
-GET / HTTP/1.1\r\n
-Host: example.com\r\n
-\r\n
-```
-
-- **Prima riga**: metodo (`GET`), percorso (`/`), versione del protocollo (`HTTP/1.1`).
-- **Intestazioni**, una per riga, nella forma `Nome: valore`.
-- **`Host`** dice al server quale sito vogliamo. Sullo stesso indirizzo IP possono
-  esserci molti siti diversi, e il server deve sapere quale scegliere. In
-  HTTP/1.1 è **obbligatoria**: senza, il server di solito risponde
-  `400 Bad Request` (prova C).
-
-### A che cosa serve la riga vuota
-
-**Segna la fine delle intestazioni.** TCP trasporta un flusso continuo di byte,
-senza "confini": il server non può sapere da solo se abbiamo finito di scrivere.
-Senza la riga vuota resta in attesa di altre intestazioni e non risponde
-(prova D). Alla fine si arrende uno dei due: lo script dopo 5 secondi, oppure
-il server, che chiude la connessione.
-
-### Come il client capisce che la risposta è finita
-
-Anche la risposta ha la stessa forma: una riga di stato (es. `HTTP/1.1 200 OK`),
-le intestazioni, **una riga vuota**, e poi il corpo (la pagina vera e propria).
-Per sapere dove finisce il corpo ci sono due modi:
-
-- **`Content-Length: N`**: il server dichiara in anticipo quanti byte manderà.
-  Il client legge esattamente N byte e sa di aver finito, anche se la
-  connessione resta aperta.
-- **Chiusura della connessione**: se manca `Content-Length`, il server chiude
-  il socket quando ha finito. Il client legge finché `recv()` non restituisce
-  0 byte.
-
-Esiste anche un terzo modo, `Transfer-Encoding: chunked`: il corpo arriva a
-pezzi, ognuno preceduto dalla sua lunghezza in esadecimale, e un pezzo lungo 0
-segna la fine. Oggi `example.com` risponde proprio così. Lo script lo
-riconosce: ricompone il corpo e dice quanti pezzi sono arrivati.
-
-### Perché proprio la porta 80?
-
-È la porta standard di HTTP. I siti in `https://` usano la porta 443 e
-cifrano tutto con TLS: lì il testo non si potrebbe scrivere "a mano" con un
-semplice socket. Per questo servono siti ancora in `http://`.
-
----
-
-## 5. Problemi frequenti
+## 4. Problemi frequenti
 
 | Messaggio / comportamento | Causa probabile | Cosa fare |
 |---|---|---|
