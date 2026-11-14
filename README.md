@@ -56,6 +56,7 @@ installare.
    curl --version
    ```
 
+
 **Sul tuo computer**
 
 ```bash
