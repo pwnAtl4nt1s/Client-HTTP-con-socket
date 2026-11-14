@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--HEAD-START-->
+<title>HTTP a mano</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Lezione interattiva: una richiesta HTTP scritta a mano su un socket TCP.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Martian+Mono:wght@400;600&display=swap">
+<style>
+/* ==========================================================================
+   HTTP A MANO — "cianotipo di rete"
+   Layout: colonna asimmetrica su carta millimetrata; i caratteri invisibili
+   (\r\n) sono sempre marcati con l'evidenziatore giallo.
+   ========================================================================== */
+:root {
+  --bg: #e9eefa;          /* carta da disegno tecnico */
+  --bg-deep: #d8e1f7;
+  --surface: #f8faff;
+  --ink: #0a1543;
+  --ink-soft: #3f4c7c;
+  --rule: #b7c5ec;
+  --blue: #1a3fe0;        /* dominante: blu cobalto */
+  --on-blue: #ffffff;
+  --yellow: #ffd60a;      /* accento 1: evidenziatore */
+  --on-yellow: #0a1543;
+  --signal: #c92a12;      /* accento 2: segnale / errore */
+  --ok: #087a4d;
+  --grid: rgba(26, 63, 224, .075);
+  --glow: rgba(26, 63, 224, .17);
+  --shadow: rgba(10, 21, 67, .16);
+  /* i pannelli di codice restano "notte" in entrambi i temi */
+  --code-bg: #0a1543;
+  --code-line: #24326e;
+  --code-fg: #e3eaff;
+  --code-dim: #93a1d3;
+  --code-red: #ff8f7d;
+  --code-green: #63e2ad;
+  --code-blue: #9db1ff;
+
+  --font-display: "Bricolage Grotesque", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Atkinson Hyperlegible", Verdana, "Segoe UI", sans-serif;
+  --font-mono: "Martian Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-io: cubic-bezier(.65, 0, .35, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --header-h: 3.5rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #070e2b; --bg-deep: #0b1640; --surface: #101d4f; --ink: #e8edff; --ink-soft: #a9b6e2;
+    --rule: #2b3a7c; --blue: #7d96ff; --on-blue: #070e2b; --signal: #ff8370; --ok: #4fdba2;
+    --grid: rgba(125, 150, 255, .08); --glow: rgba(125, 150, 255, .16); --shadow: rgba(0, 0, 0, .45);
+    --code-bg: #040920; --code-line: #1c2a63;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #070e2b; --bg-deep: #0b1640; --surface: #101d4f; --ink: #e8edff; --ink-soft: #a9b6e2;
+  --rule: #2b3a7c; --blue: #7d96ff; --on-blue: #070e2b; --signal: #ff8370; --ok: #4fdba2;
+  --grid: rgba(125, 150, 255, .08); --glow: rgba(125, 150, 255, .16); --shadow: rgba(0, 0, 0, .45);
+  --code-bg: #040920; --code-line: #1c2a63;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-h) + 1.5rem); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 1.0625rem/1.6 var(--font-body);
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+/* carta millimetrata + alone: texture fissa dietro a tutto */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 85% -10%, var(--glow), transparent 60%),
+    radial-gradient(45rem 35rem at -10% 60%, var(--glow), transparent 65%),
+    linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 100% 1.75rem,
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 1.75rem 100%,
+    linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 100% 8.75rem,
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 8.75rem 100%;
+}
+body::before { /* fascia sopra l'header sticky nelle app mobili */
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--bg);
+}
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.02; letter-spacing: -.02em; }
+p { margin: 0; }
+code, kbd, pre { font-family: var(--font-mono); font-size: .8em; }
+a { color: var(--blue); }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; border-radius: 4px; }
+.wrap {
+  width: 100%; max-width: 76rem; margin-inline: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 48rem) { .wrap { padding-left: max(2.5rem, env(safe-area-inset-left, 0px)); padding-right: max(2.5rem, env(safe-area-inset-right, 0px)); } }
+.skip {
+  position: absolute; left: 1rem; top: 0; z-index: 50; background: var(--yellow); color: var(--on-yellow);
+  padding: .6rem 1rem; font-weight: 700; border-radius: 0 0 .5rem .5rem;
+  transform: translateY(-110%); transition: transform .3s var(--ease-out);
+}
+.skip:focus { transform: none; }
+.mono { font-family: var(--font-mono); font-size: .78em; letter-spacing: 0; }
+.crlf { /* il segno distintivo: l'invisibile reso visibile */
+  display: inline-block; background: var(--yellow); color: var(--on-yellow); font-family: var(--font-mono);
+  font-weight: 600; font-size: .78em; padding: .08em .38em; margin-inline: .25em; border-radius: .2em;
+  transform: rotate(-2deg); white-space: nowrap;
+}
+
+/* ---------- header ---------- */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; height: var(--header-h);
+  background: var(--bg); border-bottom: 1px solid var(--rule);
+}
+.top .wrap { display: flex; align-items: center; gap: 1rem; height: 100%; }
+.logo {
+  font: 600 .8rem var(--font-mono); text-decoration: none; color: var(--ink); white-space: nowrap;
+  display: flex; align-items: center; gap: .5rem;
+}
+@media (max-width: 40rem) { .logo-t { display: none; } }
+.logo b { background: var(--blue); color: var(--on-blue); padding: .3em .55em; border-radius: .25em; }
+.nav { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.nav::-webkit-scrollbar { display: none; }
+.nav ul { display: flex; gap: .25rem; list-style: none; margin: 0; padding: .35rem 0; justify-content: flex-end; width: max-content; margin-left: auto; }
+.nav a {
+  position: relative; display: block; padding: .35rem .6rem; font-size: .9rem; color: var(--ink-soft);
+  text-decoration: none; white-space: nowrap; border-radius: .3rem;
+}
+.nav a::after {
+  content: ""; position: absolute; left: .6rem; right: .6rem; bottom: .1rem; height: 3px; background: var(--yellow);
+  transform: scaleX(0); transform-origin: left; transition: transform .45s var(--ease-out);
+}
+.nav a:hover, .nav a[aria-current="true"] { color: var(--ink); }
+.nav a:hover::after, .nav a[aria-current="true"]::after { transform: scaleX(1); }
+.theme-btn {
+  flex: none; width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 1.5px solid var(--ink);
+  background: var(--surface); display: grid; place-items: center; transition: transform .5s var(--ease-spring);
+}
+.theme-btn:hover { transform: rotate(180deg) scale(1.08); }
+.theme-btn:active { transform: scale(.9); }
+.theme-btn i { width: 1rem; height: 1rem; border-radius: 50%; background: linear-gradient(90deg, var(--ink) 50%, transparent 50%); border: 1.5px solid var(--ink); }
+.progress { position: absolute; left: 0; right: 0; bottom: -3px; height: 3px; background: var(--blue); transform: scaleX(0); transform-origin: left; }
+
+/* ---------- pulsanti ---------- */
+.btn {
+  position: relative; display: inline-flex; align-items: center; gap: .6rem; border: 0; text-decoration: none;
+  background: var(--blue); color: var(--on-blue); font: 700 1rem var(--font-body);
+  padding: .85rem 1.35rem; border-radius: .4rem; transition: transform .35s var(--ease-spring);
+}
+.btn:hover { transform: translate(-3px, -3px); }
+.btn:active { transform: translate(0, 0) scale(.98); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.btn.ghost { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.btn.small { padding: .5rem .85rem; font-size: .9rem; }
+.btn-wrap { position: relative; z-index: 0; display: inline-flex; }
+.btn-wrap::before { /* ombra dura sfalsata, da timbro: sta dietro al pulsante */
+  content: ""; position: absolute; inset: 0; border-radius: .4rem; background: var(--yellow); z-index: -1;
+  transition: transform .35s var(--ease-spring);
+}
+.btn-wrap:hover::before { transform: translate(4px, 4px); }
+.btn-wrap:active::before { transform: none; }
+.btn-wrap:has([disabled])::before { opacity: 0; }
+
+.copy {
+  flex: none; border: 1px solid var(--code-line); background: transparent; color: var(--code-fg);
+  font: 600 .68rem var(--font-mono); padding: .45em .8em; border-radius: .3em;
+  transition: transform .3s var(--ease-spring);
+}
+.copy:hover { transform: translateY(-2px); border-color: var(--yellow); color: var(--yellow); }
+.copy:active { transform: scale(.92); }
+.copy.done { background: var(--yellow); color: var(--on-yellow); border-color: var(--yellow); }
+.cmd {
+  display: flex; align-items: center; gap: .75rem; background: var(--code-bg); color: var(--code-fg);
+  border-radius: .5rem; padding: .7rem .8rem .7rem 1rem; min-width: 0;
+}
+.cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: .74rem; padding-block: .2rem; scrollbar-width: thin; }
+.cmd code::before { content: "$ "; color: var(--code-dim); }
+
+.stage, .equiv, .trials, .trial-b, .stream, .form, .opts, .ideas, .walk { grid-template-columns: minmax(0, 1fr); }
+/* ---------- sezioni ---------- */
+section { padding-block: clamp(4rem, 9vw, 8rem); position: relative; }
+.sec-head { display: grid; gap: 1.1rem; margin-bottom: clamp(2rem, 5vw, 3.5rem); max-width: 46rem; }
+.eyebrow {
+  font: 600 .72rem var(--font-mono); text-transform: uppercase; letter-spacing: .12em; color: var(--blue);
+  display: flex; align-items: center; gap: .3rem .8rem; flex-wrap: wrap;
+}
+.eyebrow::before { content: ""; width: 2.5rem; height: 2px; background: currentColor; }
+.eyebrow span { color: var(--ink-soft); }
+h2 { font-size: clamp(2.2rem, 6vw, 4.2rem); font-weight: 800; }
+.lead { font-size: clamp(1.1rem, 1.6vw, 1.3rem); color: var(--ink-soft); max-width: 38rem; }
+.shift { margin-left: clamp(0rem, 8vw, 7rem); } /* asimmetria: alcune testate rientrano */
+mark { background: none; color: inherit; position: relative; white-space: nowrap; z-index: 0; }
+mark::before {
+  content: ""; position: absolute; inset: 12% -.12em 4%; background: var(--yellow); z-index: -1;
+  transform: rotate(-1.2deg); border-radius: .12em;
+}
+:root[data-theme="dark"] mark, .on-yellow { color: var(--on-yellow); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) mark { color: var(--on-yellow); } }
+
+/* rivelazione allo scroll: lo stato nascosto viene aggiunto solo da JS */
+.reveal { transition: transform .9s var(--ease-out), opacity .9s var(--ease-out); transition-delay: var(--d, 0s); }
+.reveal.pre { opacity: 0; transform: translateY(2.2rem); }
+
+/* ---------- hero ---------- */
+.hero { padding-block: clamp(3rem, 8vw, 6.5rem) clamp(3rem, 6vw, 5rem); overflow: hidden; }
+.hero .wrap { position: relative; }
+.port { /* numero fuori griglia */
+  position: absolute; right: -2rem; top: -3.5rem; z-index: -1; font: 800 clamp(11rem, 34vw, 30rem)/.8 var(--font-display);
+  color: transparent; -webkit-text-stroke: 2px var(--rule); letter-spacing: -.06em; user-select: none;
+}
+.hero h1 { font-size: clamp(2.6rem, 8.2vw, 7rem); font-weight: 800; max-width: 13ch; letter-spacing: -.005em; line-height: 1.04; }
+.hero h1 .w { display: inline-block; }
+.hero-sub { margin-top: 1.75rem; max-width: 33rem; font-size: clamp(1.1rem, 1.7vw, 1.3rem); color: var(--ink-soft); }
+.hero-cta { margin-top: 2.25rem; display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; }
+.strip { /* la richiesta, a grandezza manifesto */
+  margin-top: clamp(3rem, 7vw, 5rem); margin-left: clamp(0rem, 10vw, 9rem); margin-right: -1rem;
+  background: var(--code-bg); color: var(--code-fg); border-radius: .75rem 0 0 .75rem; position: relative;
+  padding: clamp(1.25rem, 3vw, 2.25rem) clamp(1.1rem, 3vw, 2.5rem); box-shadow: -1rem 1rem 0 var(--blue);
+  transform: rotate(-1.2deg);
+}
+.strip-label { font: 600 .66rem var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--code-dim); display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.strip-req { font: 600 clamp(.82rem, 2.5vw, 1.7rem)/1.9 var(--font-mono); overflow-x: auto; white-space: nowrap; }
+.strip-req .ch { opacity: 0; animation: type .01s linear forwards; animation-delay: calc(var(--i) * 42ms + 1.5s); }
+.strip-req .crlf { opacity: 0; animation: pop .5s var(--ease-spring) forwards; animation-delay: calc(var(--i) * 42ms + 1.5s); font-size: .7em; }
+.strip-req .gap::after { content: "riga vuota"; font: 400 .5em var(--font-mono); color: var(--code-dim); margin-left: .8em; letter-spacing: .08em; }
+@keyframes type { to { opacity: 1; } }
+@keyframes pop { from { opacity: 0; transform: scale(.3) rotate(-14deg); } to { opacity: 1; transform: scale(1) rotate(-2deg); } }
+/* ingresso orchestrato */
+.in { opacity: 0; transform: translateY(1.75rem); animation: rise 1s var(--ease-out) forwards; animation-delay: calc(var(--n) * 110ms + .1s); }
+.hero h1 .w { opacity: 0; transform: translateY(.6em) rotate(3deg); animation: rise .9s var(--ease-out) forwards; animation-delay: calc(var(--n) * 70ms + .2s); }
+.strip.in { transform: translateY(2rem) rotate(0deg); animation-name: rise-tilt; }
+@keyframes rise { to { opacity: 1; transform: none; } }
+@keyframes rise-tilt { to { opacity: 1; transform: rotate(-1.2deg); } }
+
+/* ---------- anatomia ---------- */
+.anatomy { display: grid; gap: 2rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 60rem) { .anatomy { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 3.5rem; } }
+.req-board { background: var(--code-bg); color: var(--code-fg); border-radius: .75rem; padding: clamp(1.1rem, 3vw, 2rem); overflow-x: auto; }
+.req-board .row { display: flex; align-items: center; gap: .5rem; min-height: 4rem; white-space: nowrap; }
+.tok {
+  position: relative; border: 0; background: transparent; color: var(--code-fg); font: 600 clamp(.85rem, 2.2vw, 1.35rem) var(--font-mono);
+  padding: .5em .5em; border-radius: .3em; transition: transform .35s var(--ease-spring);
+}
+.tok::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--code-line); opacity: 0; transition: opacity .25s var(--ease-out); z-index: -1; }
+.tok { z-index: 0; }
+.tok:hover { transform: translateY(-3px); }
+.tok:hover::before { opacity: 1; }
+.tok[aria-pressed="true"] { color: var(--on-yellow); transform: translateY(-3px) rotate(-1.5deg); }
+.tok[aria-pressed="true"]::before { opacity: 1; background: var(--yellow); }
+.tok.is-crlf { color: var(--on-yellow); font-size: clamp(.7rem, 1.6vw, 1rem); }
+.tok.is-crlf::before { opacity: 1; background: var(--yellow); }
+.tok.is-crlf[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--code-fg); }
+.req-board.hide-crlf .tok.is-crlf { opacity: .12; }
+.row-note { font: 400 .62rem var(--font-mono); color: var(--code-dim); letter-spacing: .08em; margin-left: .5rem; }
+.board-foot { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--code-line); font: 400 .68rem var(--font-mono); color: var(--code-dim); }
+.switch { display: inline-flex; align-items: center; gap: .6rem; cursor: pointer; color: var(--code-fg); }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch i { width: 2.4rem; height: 1.3rem; border-radius: 1rem; background: var(--code-line); position: relative; flex: none; }
+.switch i::after { content: ""; position: absolute; top: .15rem; left: .15rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--code-fg); transition: transform .4s var(--ease-spring); }
+.switch input:checked + i { background: var(--yellow); }
+.switch input:checked + i::after { transform: translateX(1.1rem); background: var(--on-yellow); }
+.switch input:focus-visible + i { outline: 3px solid var(--yellow); outline-offset: 3px; }
+.detail { position: relative; padding: .25rem 0 0 1.5rem; border-left: 3px solid var(--blue); min-height: 15rem; }
+.detail-kind { font: 600 .7rem var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
+.detail h3 { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; margin-top: .5rem; }
+.detail p { margin-top: 1rem; color: var(--ink-soft); max-width: 30rem; }
+.detail .hex { margin-top: 1.25rem; font: 400 .72rem/1.9 var(--font-mono); color: var(--ink-soft); }
+.detail .hex b { color: var(--ink); font-weight: 600; }
+.detail.swap > * { animation: swap .55s var(--ease-out) both; }
+.detail.swap > *:nth-child(2) { animation-delay: .05s; } .detail.swap > *:nth-child(3) { animation-delay: .1s; } .detail.swap > *:nth-child(4) { animation-delay: .15s; }
+@keyframes swap { from { opacity: 0; transform: translateX(1.2rem); } to { opacity: 1; transform: none; } }
+
+/* ---------- laboratorio ---------- */
+.band { background: var(--bg-deep); border-block: 1px solid var(--rule); }
+.lab { display: grid; gap: 2rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 60rem) { .lab { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 3rem; } }
+.form { display: grid; gap: 1.25rem; }
+.field { display: grid; gap: .4rem; }
+.field label, .legend { font: 600 .7rem var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
+.field input[type="text"] {
+  width: 100%; background: var(--surface); border: 1.5px solid var(--ink); border-radius: .4rem; padding: .75rem .9rem;
+  font: 600 .85rem var(--font-mono); color: var(--ink); transition: transform .3s var(--ease-out);
+}
+.field input[type="text"]:focus { transform: translateY(-2px); box-shadow: 4px 4px 0 var(--yellow); outline: none; }
+.check { display: flex; gap: .75rem; align-items: flex-start; cursor: pointer; padding: .7rem .8rem; border: 1.5px dashed var(--rule); border-radius: .4rem; background: var(--surface); }
+.check input { width: 1.2rem; height: 1.2rem; margin-top: .2rem; accent-color: var(--blue); flex: none; }
+.check small { display: block; color: var(--ink-soft); font-size: .88rem; line-height: 1.4; }
+.presets { display: flex; flex-wrap: wrap; gap: .5rem; }
+.chip {
+  border: 1.5px solid var(--ink); background: var(--surface); color: var(--ink); border-radius: 99rem; padding: .35rem .85rem;
+  font: 400 .9rem var(--font-body); transition: transform .3s var(--ease-spring);
+}
+.chip:hover { transform: translateY(-2px) rotate(-1.5deg); }
+.chip:active { transform: scale(.94); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.stage { background: var(--code-bg); color: var(--code-fg); border-radius: .75rem; padding: clamp(1rem, 2.5vw, 1.75rem); display: grid; gap: 1.25rem; min-width: 0; box-shadow: .75rem .75rem 0 var(--blue); }
+.stage-h { font: 600 .64rem var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--code-dim); display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.raw { font: 400 clamp(.72rem, 1.5vw, .92rem)/2.1 var(--font-mono); overflow-x: auto; white-space: nowrap; min-height: 6.5em; }
+.raw .rl-blank::after { content: "← riga vuota"; color: var(--code-dim); font-size: .85em; margin-left: .4em; }
+.raw .missing { color: var(--code-red); font-size: .85em; }
+.wire { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; font: 600 .64rem var(--font-mono); letter-spacing: .1em; }
+.wire-line { position: relative; height: 2px; background: repeating-linear-gradient(90deg, var(--code-dim) 0 6px, transparent 6px 12px); }
+.packet { position: absolute; left: 0; top: -.45rem; width: 1rem; height: 1rem; border-radius: .2rem; background: var(--yellow); opacity: 0; }
+.packet.back { background: var(--code-red); }
+.node { padding: .5em .8em; border: 1.5px solid var(--code-dim); border-radius: .3em; white-space: nowrap; }
+.node.live { border-color: var(--yellow); color: var(--yellow); }
+.out { font: 400 clamp(.7rem, 1.4vw, .85rem)/1.75 var(--font-mono); min-height: 13rem; overflow-x: auto; border-top: 1px solid var(--code-line); padding-top: 1rem; }
+.out .l { white-space: pre; animation: line .45s var(--ease-out) both; }
+.out .l.st { color: var(--code-green); font-weight: 600; } .out .l.st.bad { color: var(--code-red); } .out .l.st.warn { color: var(--yellow); }
+.out .l.h b { color: var(--code-blue); font-weight: 400; } .out .l.dim { color: var(--code-dim); } .out .l.err { color: var(--code-red); }
+.out .l.end { margin-top: .9rem; color: var(--on-yellow); background: var(--yellow); display: inline-block; padding: .1em .7em; border-radius: .25em; white-space: normal; font-weight: 600; }
+@keyframes line { from { opacity: 0; transform: translateY(.5rem); } to { opacity: 1; transform: none; } }
+.wait { height: .4rem; background: var(--code-line); border-radius: 1rem; overflow: hidden; margin-block: .6rem; max-width: 22rem; }
+.wait b { display: block; height: 100%; background: var(--code-red); transform: scaleX(0); transform-origin: left; animation: fill 5s linear forwards; }
+@keyframes fill { to { transform: scaleX(1); } }
+.equiv { display: grid; gap: .6rem; }
+.equiv .cmd { background: transparent; border: 1px solid var(--code-line); }
+.note { font-size: .92rem; color: var(--ink-soft); border-left: 3px solid var(--yellow); padding-left: .9rem; }
+
+/* ---------- dimostrazione ---------- */
+.demo { display: grid; gap: 2.5rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 64rem) { .demo { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; } .demo > :last-child { margin-top: 5rem; } }
+.panel { background: var(--code-bg); color: var(--code-fg); border-radius: .75rem; overflow: hidden; min-width: 0; }
+.panel-h { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 1rem; border-bottom: 1px solid var(--code-line); font: 600 .66rem var(--font-mono); letter-spacing: .1em; color: var(--code-dim); }
+.code { margin: 0; padding: 1rem 0; overflow-x: auto; font: 400 clamp(.68rem, 1.3vw, .8rem)/1.9 var(--font-mono); counter-reset: ln; }
+.code .ln { display: block; padding: 0 1rem 0 0; white-space: pre; position: relative; transition: opacity .35s var(--ease-out); }
+.code .ln::before { counter-increment: ln; content: counter(ln); display: inline-block; width: 2.6rem; padding-right: .9rem; text-align: right; color: var(--code-line); }
+.code.focus .ln:not(.hot) { opacity: .28; }
+.code .ln.hot::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--yellow); }
+.code .k { color: var(--code-blue); } .code .s { color: var(--code-green); } .code .c { color: var(--code-dim); } .code .y { color: var(--yellow); }
+.code .gt { color: var(--yellow); } .code .lt { color: var(--code-red); } .code .st { color: var(--code-dim); }
+.walk { list-style: none; margin: 1.25rem 0 0; padding: 0; display: grid; gap: .5rem; counter-reset: w; }
+.walk button {
+  width: 100%; text-align: left; display: grid; grid-template-columns: 2.2rem minmax(0, 1fr); gap: .75rem; align-items: start;
+  border: 1.5px solid var(--rule); background: var(--surface); color: var(--ink); border-radius: .5rem; padding: .8rem .9rem;
+  transition: transform .35s var(--ease-spring);
+}
+.walk button::before { counter-increment: w; content: counter(w); font: 800 1.3rem/1 var(--font-display); color: var(--blue); }
+.walk button:hover { transform: translateX(6px); }
+.walk button[aria-pressed="true"] { border-color: var(--ink); box-shadow: 5px 5px 0 var(--yellow); transform: translateX(6px); }
+.walk b { display: block; } .walk span { color: var(--ink-soft); font-size: .93rem; line-height: 1.45; display: block; }
+.filters { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.25rem; }
+
+/* ---------- esercizio ---------- */
+.ex-top { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; justify-content: space-between; margin-bottom: 2rem; }
+.meter { display: flex; align-items: center; gap: .9rem; font: 600 .74rem var(--font-mono); }
+.meter-bar { width: 9rem; height: .55rem; background: var(--rule); border-radius: 1rem; overflow: hidden; }
+.meter-bar b { display: block; height: 100%; background: var(--blue); transform: scaleX(var(--p, 0)); transform-origin: left; transition: transform .8s var(--ease-out); }
+.trials { display: grid; gap: 1.25rem; }
+.trial { background: var(--surface); border: 1.5px solid var(--ink); border-radius: .75rem; position: relative; }
+.trial:nth-child(even) { margin-left: clamp(0rem, 6vw, 5rem); } .trial:nth-child(odd) { margin-right: clamp(0rem, 6vw, 5rem); }
+.trial-h { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1rem; align-items: center; width: 100%; background: transparent; border: 0; padding: 1.1rem 1.25rem; text-align: left; }
+.letter { width: 3rem; height: 3rem; display: grid; place-items: center; background: var(--blue); color: var(--on-blue); font: 800 1.6rem var(--font-display); border-radius: .4rem; transition: transform .5s var(--ease-spring); }
+.trial-h:hover .letter { transform: rotate(-8deg) scale(1.08); }
+.trial.done .letter { background: var(--ok); }
+.trial-h h3 { font-size: clamp(1.25rem, 2.6vw, 1.7rem); font-weight: 800; }
+.trial-h small { display: block; font: 400 .92rem var(--font-body); color: var(--ink-soft); letter-spacing: 0; margin-top: .2rem; }
+.plus { width: 1.4rem; height: 1.4rem; position: relative; transition: transform .5s var(--ease-spring); }
+.plus::before, .plus::after { content: ""; position: absolute; left: 0; right: 0; top: calc(50% - 1px); height: 2px; background: var(--ink); }
+.plus::after { transform: rotate(90deg); transition: transform .5s var(--ease-spring); }
+.trial.open .plus { transform: rotate(180deg); } .trial.open .plus::after { transform: rotate(0deg); }
+.trial-b { display: none; padding: 0 1.25rem 1.4rem; gap: 1.1rem; }
+.trial.open .trial-b { display: grid; animation: line .5s var(--ease-out) both; }
+.q { font-weight: 700; }
+.opts { display: grid; gap: .5rem; }
+.opt {
+  text-align: left; border: 1.5px solid var(--rule); background: var(--bg); color: var(--ink); border-radius: .45rem; padding: .7rem .9rem;
+  display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); gap: .6rem; transition: transform .3s var(--ease-spring);
+}
+.opt::before { content: attr(data-k); font: 600 .75rem/1.9 var(--font-mono); color: var(--blue); }
+.opt:not([disabled]):hover { transform: translateX(5px); border-color: var(--ink); }
+.opt:not([disabled]):active { transform: scale(.98); }
+.opt[disabled] { cursor: default; }
+.opt.right { border-color: var(--ok); box-shadow: inset 0 0 0 1.5px var(--ok); }
+.opt.right::before { content: "✓"; color: var(--ok); }
+.opt.wrong { border-color: var(--signal); animation: shake .45s var(--ease-io); }
+.opt.wrong::before { content: "✗"; color: var(--signal); }
+.opt.fade { opacity: .5; }
+@keyframes shake { 20% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 80% { transform: translateX(-3px); } }
+.why { border-left: 3px solid var(--yellow); padding-left: .9rem; color: var(--ink-soft); animation: line .5s var(--ease-out) both; }
+.why b { color: var(--ink); }
+
+/* ---------- spiegazione ---------- */
+.ideas { display: grid; gap: clamp(2rem, 5vw, 4rem); }
+.idea { display: grid; gap: 1rem 3rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 56rem) { .idea { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); } .idea:nth-child(2) { grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); } .idea:nth-child(2) > :first-child { order: 2; } }
+.idea h3 { font-size: clamp(1.7rem, 3.6vw, 2.6rem); font-weight: 800; }
+.idea-n { font: 800 clamp(4rem, 9vw, 7rem)/.8 var(--font-display); color: transparent; -webkit-text-stroke: 2px var(--blue); display: block; margin-bottom: .75rem; }
+.idea p + p { margin-top: .9rem; } .idea p { color: var(--ink-soft); max-width: 36rem; } .idea p strong { color: var(--ink); }
+.sample { background: var(--code-bg); color: var(--code-fg); border-radius: .6rem; padding: 1.1rem 1.25rem; font: 400 clamp(.72rem, 1.4vw, .88rem)/2.1 var(--font-mono); overflow-x: auto; white-space: nowrap; margin-top: 1.1rem; }
+.stream { background: var(--surface); border: 1.5px solid var(--ink); border-radius: .75rem; padding: clamp(1rem, 2.5vw, 1.6rem); display: grid; gap: 1.1rem; margin-top: 1.25rem; box-shadow: .6rem .6rem 0 var(--yellow); }
+.stream-head { font: 600 .74rem/1.9 var(--font-mono); background: var(--code-bg); color: var(--code-fg); border-radius: .4rem; padding: .7rem .9rem; overflow-x: auto; white-space: nowrap; }
+.stream-head .hl { color: var(--yellow); }
+.cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(1.9rem, 1fr)); gap: .35rem; }
+.cell { aspect-ratio: 1; border-radius: .25rem; background: var(--rule); position: relative; display: grid; place-items: center; font: 600 .55rem var(--font-mono); color: var(--on-blue); }
+.cell::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--blue); opacity: 0; transform: scale(.3); transition: transform .45s var(--ease-spring), opacity .3s var(--ease-out); }
+.cell.on::before { opacity: 1; transform: none; }
+.cell.fin::before { background: var(--signal); }
+.cell span { position: relative; }
+.stream-st { font: 600 .78rem/1.6 var(--font-mono); min-height: 3.2em; }
+.stream-st.fin { color: var(--ok); }
+.stream-ctl { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
+
+/* ---------- quiz ---------- */
+.quiz { background: var(--blue); color: var(--on-blue); }
+.quiz .eyebrow, .quiz .eyebrow span, .quiz .lead { color: var(--on-blue); }
+.quiz-card { background: var(--surface); color: var(--ink); border-radius: .9rem; padding: clamp(1.25rem, 4vw, 2.75rem); max-width: 48rem; margin-left: auto; box-shadow: -.9rem .9rem 0 var(--yellow); position: relative; }
+.quiz-top { display: flex; justify-content: space-between; gap: 1rem; font: 600 .74rem var(--font-mono); color: var(--ink-soft); margin-bottom: 1rem; font-variant-numeric: tabular-nums; }
+.dots { display: flex; gap: .3rem; margin-bottom: 1.5rem; }
+.dots i { flex: 1; height: .4rem; border-radius: 1rem; background: var(--rule); }
+.dots i.ok { background: var(--ok); } .dots i.ko { background: var(--signal); } .dots i.cur { background: var(--ink); }
+.quiz-q { font: 800 clamp(1.4rem, 3.2vw, 2.1rem)/1.12 var(--font-display); letter-spacing: -.015em; margin-bottom: 1.25rem; text-wrap: balance; }
+.quiz-q code { font-size: .72em; }
+.quiz-body > * { animation: swap .55s var(--ease-out) both; }
+.quiz-next { margin-top: 1.25rem; display: flex; justify-content: flex-end; }
+.score { font: 800 clamp(4.5rem, 14vw, 9rem)/.85 var(--font-display); letter-spacing: -.05em; color: var(--blue); font-variant-numeric: tabular-nums; }
+.score small { font-size: .32em; color: var(--ink-soft); letter-spacing: 0; }
+.review { list-style: none; padding: 0; margin: 1.5rem 0; display: grid; gap: .45rem; font-size: .95rem; }
+.review li { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: .5rem; }
+.review .ok { color: var(--ok); font-weight: 700; } .review .ko { color: var(--signal); font-weight: 700; }
+
+/* ---------- glossario ---------- */
+.gloss-tools { display: grid; gap: 1rem; margin-bottom: 2rem; max-width: 46rem; }
+.search { position: relative; }
+.search input { width: 100%; background: var(--surface); border: 1.5px solid var(--ink); border-radius: .5rem; padding: 1rem 1rem 1rem 3rem; font-size: 1.1rem; color: var(--ink); transition: transform .3s var(--ease-out); }
+.search input:focus { outline: none; transform: translateY(-2px); box-shadow: 5px 5px 0 var(--yellow); }
+.search::before { content: "/"; position: absolute; left: 1.1rem; top: 50%; transform: translateY(-50%); font: 600 1.1rem var(--font-mono); color: var(--blue); z-index: 1; }
+.gloss-count { font: 600 .72rem var(--font-mono); color: var(--ink-soft); }
+.terms { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17.5rem), 1fr)); gap: 0 2.5rem; margin: 0; }
+.term { padding: 1.1rem 0; border-top: 1px solid var(--rule); transition: transform .4s var(--ease-out); }
+.term:hover { transform: translateX(6px); }
+.term dt { font: 600 .84rem var(--font-mono); display: flex; justify-content: space-between; gap: .75rem; align-items: baseline; }
+.term dt small { font: 400 .62rem var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--blue); white-space: nowrap; }
+.term dd { margin: .45rem 0 0; color: var(--ink-soft); font-size: .96rem; line-height: 1.5; }
+.empty { padding: 2rem 0; color: var(--ink-soft); }
+
+/* ---------- footer ---------- */
+footer { border-top: 1px solid var(--rule); padding-block: 2.5rem 6rem; font-size: .92rem; color: var(--ink-soft); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; justify-content: space-between; }
+
+/* ---------- movimento ridotto ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001s !important; animation-delay: 0s !important; transition-duration: .001s !important; transition-delay: 0s !important; }
+  .reveal.pre { opacity: 1; transform: none; }
+  .wait b { animation-duration: 5s !important; } /* l'attesa è contenuto, non decorazione */
+}
+</style>
+<!--HEAD-END-->
+</head>
+<body>
+<!--BODY-START-->
+<a class="skip" href="#main">Salta al contenuto</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#inizio" aria-label="HTTP a mano, torna all'inizio"><b>GET /</b><span class="logo-t">HTTP a mano</span></a>
+    <nav class="nav" aria-label="Sezioni della lezione">
+      <ul>
+        <li><a href="#anatomia">Anatomia</a></li>
+        <li><a href="#laboratorio">Laboratorio</a></li>
+        <li><a href="#dimostrazione">Dimostrazione</a></li>
+        <li><a href="#esercizio">Esercizio</a></li>
+        <li><a href="#spiegazione">Spiegazione</a></li>
+        <li><a href="#quiz">Quiz</a></li>
+        <li><a href="#glossario">Glossario</a></li>
+      </ul>
+    </nav>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="Cambia tema chiaro/scuro"><i></i></button>
+  </div>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+</header>
+
+<main id="main">
+
+<!-- ============ HERO ============ -->
+<section class="hero" id="inizio" aria-labelledby="h-hero">
+  <div class="wrap">
+    <div class="port in" style="--n:6" aria-hidden="true">80</div>
+    <p class="eyebrow in" style="--n:0">Sistemi e reti <span>· client HTTP con socket</span></p>
+    <h1 id="h-hero" style="margin-top:1.25rem">Un browser, alla fine, apre una connessione TCP e <mark>scrive del testo.</mark></h1>
+    <p class="hero-sub in" style="--n:9">Niente magia: tre righe di caratteri spedite alla porta 80. Oggi le scriviamo a mano con un socket Python, e guardiamo cosa succede quando ne togliamo una.</p>
+    <div class="hero-cta in" style="--n:11">
+      <span class="btn-wrap"><a class="btn" href="#anatomia">Smonta la richiesta <span aria-hidden="true">↓</span></a></span>
+      <span class="btn-wrap"><a class="btn ghost" href="#esercizio">Vai all'esercizio</a></span>
+    </div>
+    <div class="strip in" style="--n:13" role="img" aria-label="La richiesta completa: GET / HTTP/1.1, a capo, Host: example.com, a capo, riga vuota. In tutto 37 byte.">
+      <div class="strip-label"><span>La richiesta completa</span><span>37 byte · ASCII</span></div>
+      <div class="strip-req" id="heroReq" aria-hidden="true"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ANATOMIA ============ -->
+<section id="anatomia" aria-labelledby="h-anatomia">
+  <div class="wrap">
+    <div class="sec-head shift reveal">
+      <p class="eyebrow">Anatomia <span>· la richiesta, pezzo per pezzo</span></p>
+      <h2 id="h-anatomia">Tre righe. <mark>Sette pezzi.</mark></h2>
+      <p class="lead">Tocca un pezzo della richiesta per sapere a cosa serve e di quali byte è fatto. Con le frecce ← → ti sposti da uno all'altro.</p>
+    </div>
+    <div class="anatomy">
+      <div class="reveal">
+        <div class="req-board" id="board" role="group" aria-label="Richiesta HTTP divisa in parti"></div>
+      </div>
+      <div class="detail reveal" id="detail" aria-live="polite" style="--d:.12s"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ LABORATORIO ============ -->
+<section id="laboratorio" class="band" aria-labelledby="h-lab">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <p class="eyebrow">Laboratorio <span>· simulatore</span></p>
+      <h2 id="h-lab">Componi, invia, guarda il cavo.</h2>
+      <p class="lead">Cambia host e percorso, togli una riga e premi Invia. La risposta qui è <strong>simulata</strong>: un browser non lascia aprire socket TCP grezzi a una pagina web. Quella vera la ottieni con i comandi qui sotto, nel terminale.</p>
+    </div>
+    <div class="lab">
+      <form class="form reveal" id="labForm" novalidate>
+        <div class="field">
+          <label for="labHost">Host</label>
+          <input type="text" id="labHost" value="example.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="labPath">Percorso</label>
+          <input type="text" id="labPath" value="/" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <label class="check" for="labHostLine">
+          <input type="checkbox" id="labHostLine" checked>
+          <span><b>Invia la riga <code>Host</code></b><small>Toglila per vedere cosa risponde un server HTTP/1.1.</small></span>
+        </label>
+        <label class="check" for="labBlank">
+          <input type="checkbox" id="labBlank" checked>
+          <span><b>Invia la riga vuota finale</b><small>Toglila: il server aspetterà per 5 secondi veri.</small></span>
+        </label>
+        <div>
+          <p class="legend" style="margin-bottom:.5rem">Casi pronti</p>
+          <div class="presets" id="presets"></div>
+        </div>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap">
+          <span class="btn-wrap"><button class="btn" id="labSend" type="submit">Invia la richiesta <span aria-hidden="true">→</span></button></span>
+        </div>
+      </form>
+      <div class="stage reveal" style="--d:.12s">
+        <div>
+          <div class="stage-h"><span>Quello che parte sul socket</span><span id="labBytes">37 byte</span></div>
+          <div class="raw" id="labRaw" aria-live="polite"></div>
+        </div>
+        <div class="wire" aria-hidden="true">
+          <span class="node" id="nodeC">CLIENT</span>
+          <span class="wire-line" id="wireLine"><i class="packet" id="packet"></i></span>
+          <span class="node" id="nodeS">SERVER :80</span>
+        </div>
+        <div>
+          <div class="stage-h"><span>Risposta (simulata)</span><span id="labState">in attesa di invio</span></div>
+          <div class="out" id="labOut" role="log" aria-live="polite" aria-label="Risposta simulata del server"><div class="l dim">Premi «Invia la richiesta» per vedere la risposta.</div></div>
+        </div>
+        <div class="equiv">
+          <div class="stage-h"><span>Gli stessi byte, per davvero</span></div>
+          <div class="cmd"><code id="eqPy"></code><button class="copy" type="button" data-copy="#eqPy">Copia</button></div>
+          <div class="cmd"><code id="eqCurl"></code><button class="copy" type="button" data-copy="#eqCurl">Copia</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DIMOSTRAZIONE ============ -->
+<section id="dimostrazione" aria-labelledby="h-demo">
+  <div class="wrap">
+    <div class="sec-head shift reveal">
+      <p class="eyebrow">Dimostrazione <span>· nel Codespace</span></p>
+      <h2 id="h-demo">Otto righe di Python, poi <mark>curl -v</mark>.</h2>
+      <p class="lead">Prima lo script: apre il socket, scrive, legge. Poi la stessa richiesta fatta da curl, che con <code>-v</code> mostra tutto quello che invia e riceve.</p>
+    </div>
+    <div class="demo">
+      <div class="reveal">
+        <div class="panel">
+          <div class="panel-h"><span>minimo.py — l'essenziale</span><button class="copy" type="button" data-copy="#pyCode">Copia</button></div>
+          <pre class="code" id="pyCode" tabindex="0" aria-label="Codice Python del client minimo"><span class="ln"><span class="k">import</span> socket</span><span class="ln"></span><span class="ln">richiesta = <span class="s">"GET / HTTP/1.1<span class="y">\r\n</span>Host: example.com<span class="y">\r\n\r\n</span>"</span></span><span class="ln"></span><span class="ln">s = socket.create_connection((<span class="s">"example.com"</span>, <span class="y">80</span>))</span><span class="ln">s.sendall(richiesta.encode(<span class="s">"ascii"</span>))</span><span class="ln"><span class="k">print</span>(s.recv(4096).decode())</span><span class="ln">s.close()</span></pre>
+        </div>
+        <ol class="walk" id="walk">
+          <li><button type="button" data-lines="3" aria-pressed="false"><span><b>La richiesta è una stringa</b><span>Tre righe di testo, ognuna chiusa da <code>\r\n</code>. L'ultimo <code>\r\n</code> da solo è la riga vuota.</span></span></button></li>
+          <li><button type="button" data-lines="5" aria-pressed="false"><span><b>Si apre la connessione TCP</b><span>Verso <code>example.com</code>, porta 80. Python risolve il nome e fa la stretta di mano TCP.</span></span></button></li>
+          <li><button type="button" data-lines="6" aria-pressed="false"><span><b>Si scrive il testo</b><span><code>encode("ascii")</code> trasforma i caratteri in byte; <code>sendall</code> li spedisce tutti.</span></span></button></li>
+          <li><button type="button" data-lines="7,8" aria-pressed="false"><span><b>Si legge e si chiude</b><span><code>recv(4096)</code> prende i primi byte arrivati. Per leggere <em>tutta</em> la risposta serve sapere dove finisce: lo fa <code>client_http.py</code>.</span></span></button></li>
+        </ol>
+        <div class="cmd" style="margin-top:1.25rem"><code id="runPy">python3 client_http.py</code><button class="copy" type="button" data-copy="#runPy">Copia</button></div>
+        <p class="note" style="margin-top:1rem">Nella repo c'è <code>client_http.py</code>: è questo stesso script, più gli argomenti da riga di comando e la lettura completa della risposta.</p>
+      </div>
+      <div class="reveal" style="--d:.12s">
+        <div class="cmd" style="margin-bottom:1rem"><code id="runCurl">curl -v http://example.com/</code><button class="copy" type="button" data-copy="#runCurl">Copia</button></div>
+        <div class="panel">
+          <div class="panel-h"><span>curl -v — output tipico, abbreviato</span></div>
+          <pre class="code" id="curlCode" tabindex="0" aria-label="Output tipico di curl -v"><span class="ln" data-k="star"><span class="st">* Connected to example.com port 80</span></span><span class="ln" data-k="gt"><span class="gt">&gt;</span> GET / HTTP/1.1</span><span class="ln" data-k="gt"><span class="gt">&gt;</span> Host: example.com</span><span class="ln" data-k="gt"><span class="gt">&gt;</span> User-Agent: curl/8.5.0</span><span class="ln" data-k="gt"><span class="gt">&gt;</span> Accept: */*</span><span class="ln" data-k="gt"><span class="gt">&gt;</span></span><span class="ln" data-k="lt"><span class="lt">&lt;</span> HTTP/1.1 200 OK</span><span class="ln" data-k="lt"><span class="lt">&lt;</span> Content-Type: text/html</span><span class="ln" data-k="lt"><span class="lt">&lt;</span> Content-Length: 1256</span><span class="ln" data-k="lt"><span class="lt">&lt;</span></span><span class="ln" data-k="body">&lt;!doctype html&gt;</span><span class="ln" data-k="body">&lt;html&gt; ...</span><span class="ln" data-k="star"><span class="st">* Connection #0 to host example.com left intact</span></span></pre>
+        </div>
+        <div class="filters" id="curlFilters" role="group" aria-label="Evidenzia le righe di curl">
+          <button class="chip" type="button" data-f="all" aria-pressed="true">Tutto</button>
+          <button class="chip" type="button" data-f="gt" aria-pressed="false"><span class="mono">&gt;</span> richiesta inviata</button>
+          <button class="chip" type="button" data-f="lt" aria-pressed="false"><span class="mono">&lt;</span> intestazioni ricevute</button>
+          <button class="chip" type="button" data-f="star" aria-pressed="false"><span class="mono">*</span> commenti di curl</button>
+        </div>
+        <p class="note" style="margin-top:1.25rem" id="curlNote">Versione di curl, lunghezza e intestazioni cambiano da un giorno all'altro. Le righe con <code>&gt;</code> sono le nostre tre righe, più due intestazioni che curl aggiunge da solo.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ESERCIZIO ============ -->
+<section id="esercizio" class="band" aria-labelledby="h-ex">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <p class="eyebrow">Esercizio <span>· tocca a voi</span></p>
+      <h2 id="h-ex">Rompetela. <mark>Apposta.</mark></h2>
+      <p class="lead">Cinque situazioni, una domanda ciascuna. Scegliete la risposta che vi aspettate: la spiegazione compare subito dopo.</p>
+    </div>
+    <div class="ex-top reveal">
+      <div class="meter" aria-live="polite"><span id="exCount">0 di 5 domande risposte</span><span class="meter-bar"><b id="exBar"></b></span></div>
+      <span class="btn-wrap"><button class="btn ghost small" type="button" id="exReset">Ricomincia l'esercizio</button></span>
+    </div>
+    <div class="trials" id="trials"></div>
+  </div>
+</section>
+
+<!-- ============ SPIEGAZIONE ============ -->
+<section id="spiegazione" aria-labelledby="h-exp">
+  <div class="wrap">
+    <div class="sec-head shift reveal">
+      <p class="eyebrow">Spiegazione <span>· i tre concetti</span></p>
+      <h2 id="h-exp">Tre cose da portarsi a casa.</h2>
+    </div>
+    <div class="ideas">
+      <article class="idea reveal">
+        <div><span class="idea-n" aria-hidden="true">1</span><h3>La richiesta è testo</h3></div>
+        <div>
+          <p>Una richiesta HTTP/1.1 è fatta di <strong>righe di caratteri ASCII</strong>. Ogni riga finisce con due caratteri invisibili: <code>\r</code> (carriage return, byte 13) e <code>\n</code> (line feed, byte 10).</p>
+          <p>La prima riga dice <strong>metodo, percorso e versione</strong>. Seguono le intestazioni, una per riga, nella forma <code>Nome: valore</code>. In HTTP/1.1 l'unica obbligatoria è <code>Host</code>: lo stesso indirizzo IP può ospitare molti siti, e il server deve sapere quale vogliamo.</p>
+          <div class="sample">GET / HTTP/1.1<span class="crlf">\r\n</span><br>Host: example.com<span class="crlf">\r\n</span><br><span class="crlf">\r\n</span></div>
+        </div>
+      </article>
+      <article class="idea reveal">
+        <div><span class="idea-n" aria-hidden="true">2</span><h3>La riga vuota dice «ho finito»</h3></div>
+        <div>
+          <p>TCP trasporta un <strong>flusso continuo di byte</strong>, senza confini tra un messaggio e l'altro. Il server non può sapere da solo se abbiamo finito di scrivere le intestazioni o se ne sta arrivando un'altra.</p>
+          <p>La riga vuota, cioè un <code>\r\n</code> subito dopo un altro <code>\r\n</code>, è il segnale: <strong>le intestazioni sono finite, puoi rispondere</strong>. Se manca, il server resta in attesa finché uno dei due si stanca: il nostro script dopo 5 secondi, oppure il server, che chiude la connessione.</p>
+        </div>
+      </article>
+      <article class="idea reveal">
+        <div><span class="idea-n" aria-hidden="true">3</span><h3>La risposta finisce in due modi</h3></div>
+        <div>
+          <p>Anche la risposta è testo: riga di stato, intestazioni, riga vuota, poi il corpo. Ma <strong>dove finisce il corpo?</strong> Il client lo capisce in uno di questi modi. Provali:</p>
+          <div class="stream">
+            <div class="stream-ctl" role="group" aria-label="Scegli come finisce la risposta">
+              <button class="chip" type="button" data-mode="len" aria-pressed="true">Con Content-Length</button>
+              <button class="chip" type="button" data-mode="close" aria-pressed="false">Con chiusura della connessione</button>
+            </div>
+            <div class="stream-head" id="streamHead"></div>
+            <div class="cells" id="cells" aria-hidden="true"></div>
+            <p class="stream-st" id="streamSt" aria-live="polite"></p>
+            <div class="stream-ctl"><span class="btn-wrap"><button class="btn small" type="button" id="streamGo">Ricevi il corpo</button></span></div>
+          </div>
+          <p style="margin-top:1.5rem">Esiste un terzo modo, <code>Transfer-Encoding: chunked</code>: il corpo arriva a pezzi, ognuno preceduto dalla propria lunghezza. Il nostro script non lo gestisce.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUIZ ============ -->
+<section id="quiz" class="quiz" aria-labelledby="h-quiz">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <p class="eyebrow">Quiz finale <span>· 8 domande</span></p>
+      <h2 id="h-quiz">Vediamo cosa è rimasto.</h2>
+      <p class="lead">Una domanda alla volta, con la spiegazione subito dopo. Alla fine il punteggio.</p>
+    </div>
+    <div class="quiz-card reveal" id="quizCard" aria-live="polite"></div>
+  </div>
+</section>
+
+<!-- ============ GLOSSARIO ============ -->
+<section id="glossario" aria-labelledby="h-gloss">
+  <div class="wrap">
+    <div class="sec-head shift reveal">
+      <p class="eyebrow">Glossario <span>· per ripassare</span></p>
+      <h2 id="h-gloss">Tutte le parole della lezione.</h2>
+    </div>
+    <div class="gloss-tools reveal">
+      <div class="search">
+        <label for="glossQ" class="legend" style="position:absolute;left:-999rem">Cerca nel glossario</label>
+        <input type="search" id="glossQ" placeholder="Cerca: Host, 404, recv…" autocomplete="off">
+      </div>
+      <div class="filters" id="glossCats" role="group" aria-label="Filtra per categoria"></div>
+      <p class="gloss-count" id="glossCount" aria-live="polite"></p>
+    </div>
+    <dl class="terms" id="terms"></dl>
+    <p class="empty" id="glossEmpty" hidden>Nessuna voce trovata. Prova con una parola più corta o togli il filtro.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Client HTTP con socket · fonte: libro di testo</span>
+    <span class="mono">GET / HTTP/1.1<span class="crlf">\r\n</span></span>
+  </div>
+</footer>
+
+<script>
+/* ==========================================================================
+   Utilità
+   ========================================================================== */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const store = { // localStorage può non esserci: mai fidarsi
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const byteLen = s => new TextEncoder().encode(s).length;
+const CRLF = '<span class="crlf">\\r\\n</span>';
+
+/* Copia negli appunti, con ripiego sulla selezione del testo */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-copy]'); if (!b) return;
+  const src = $(b.dataset.copy); const text = src.innerText.replace(/ /g, ' ');
+  const ok = () => { b.textContent = 'Copiato'; b.classList.add('done'); setTimeout(() => { b.textContent = 'Copia'; b.classList.remove('done'); }, 1400); };
+  const fallback = () => { const r = document.createRange(); r.selectNodeContents(src); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Selezionato'; setTimeout(() => b.textContent = 'Copia', 1600); };
+  try { navigator.clipboard.writeText(text).then(ok, fallback); } catch { fallback(); }
+});
+
+/* ==========================================================================
+   Tema
+   ========================================================================== */
+(() => {
+  const root = document.documentElement; const saved = store.get('tema', null);
+  if (saved) root.dataset.theme = saved;
+  $('#themeBtn').addEventListener('click', () => {
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark'; store.set('tema', root.dataset.theme);
+  });
+})();
+
+/* ==========================================================================
+   Hero: titolo parola per parola + richiesta "battuta" a macchina
+   ========================================================================== */
+(() => {
+  const h = $('#h-hero'); let n = 0;
+  const wrapWords = node => [...node.childNodes].forEach(c => {
+    if (c.nodeType === 3) {
+      const f = document.createDocumentFragment();
+      c.textContent.split(/(\s+)/).forEach(w => {
+        if (!w.trim()) { f.append(w); return; }
+        const s = document.createElement('span'); s.className = 'w'; s.style.setProperty('--n', n++); s.textContent = w; f.append(s);
+      });
+      c.replaceWith(f);
+    } else if (c.tagName === 'MARK') { c.classList.add('w'); c.style.setProperty('--n', n++); }
+  });
+  wrapWords(h);
+
+  const lines = ['GET / HTTP/1.1', 'Host: example.com', '']; let i = 0, html = '';
+  lines.forEach(l => {
+    html += `<div class="${l ? '' : 'gap'}">`;
+    for (const ch of l) html += `<span class="ch" style="--i:${i++}">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`;
+    i += 3; html += `<span class="crlf" style="--i:${i}">\\r\\n</span></div>`; i += 5;
+  });
+  $('#heroReq').innerHTML = html;
+})();
+
+/* ==========================================================================
+   Rivelazione allo scroll, barra di avanzamento, voce di menu attiva
+   ========================================================================== */
+(() => {
+  const els = $$('.reveal');
+  if ('IntersectionObserver' in window && !reduced) {
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.remove('pre'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -8% 0px', threshold: .08 });
+    // lo stato nascosto si applica solo a ciò che è sotto la piega
+    els.forEach(el => { if (el.getBoundingClientRect().top > innerHeight * .95) { el.classList.add('pre'); io.observe(el); } });
+  }
+  const bar = $('#progress'); let tick = false;
+  const onScroll = () => {
+    if (tick) return; tick = true;
+    requestAnimationFrame(() => {
+      const max = document.documentElement.scrollHeight - innerHeight;
+      bar.style.transform = `scaleX(${max > 0 ? Math.min(1, scrollY / max) : 0})`;
+      tick = false;
+    });
+  };
+  addEventListener('scroll', onScroll, { passive: true });
+
+  const links = $$('.nav a'); const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const spy = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    links.forEach(a => a.removeAttribute('aria-current'));
+    const a = map.get(e.target.id);
+    if (a) { a.setAttribute('aria-current', 'true'); const nav = $('.nav'); nav.scrollTo({ left: a.offsetLeft - nav.clientWidth / 2 + a.clientWidth / 2, behavior: reduced ? 'auto' : 'smooth' }); }
+  }), { rootMargin: '-45% 0px -50% 0px' });
+  $$('main section[id]').forEach(s => spy.observe(s));
+})();
+
+/* ==========================================================================
+   Anatomia della richiesta
+   ========================================================================== */
+(() => {
+  const TOK = [
+    { t: 'GET', raw: 'GET', kind: 'Riga di richiesta', h: 'Il metodo', p: 'Dice che cosa vogliamo fare. GET significa «mandami questa risorsa». Altri metodi sono POST, per inviare dati, e HEAD, per avere solo le intestazioni.' },
+    { t: '/', raw: '/', kind: 'Riga di richiesta', h: 'Il percorso', p: 'Quale risorsa del sito vogliamo. La barra da sola è la pagina principale; /foto/gatto.html sarebbe un altro documento.' },
+    { t: 'HTTP/1.1', raw: 'HTTP/1.1', kind: 'Riga di richiesta', h: 'La versione', p: 'Con quale versione del protocollo stiamo parlando. Con HTTP/1.1 la riga Host diventa obbligatoria e la connessione, di norma, resta aperta dopo la risposta.' },
+    { t: '\\r\\n', raw: '\r\n', crlf: 1, kind: 'Fine riga', h: 'Carriage return + line feed', p: 'Due caratteri invisibili che chiudono ogni riga. Sulla tastiera premi Invio e non li vedi; su un socket nessuno li aggiunge per te, vanno scritti.' , nl: 1 },
+    { t: 'Host:', raw: 'Host:', kind: 'Intestazione', h: 'Il nome dell\'intestazione', p: 'Le intestazioni hanno tutte la stessa forma: un nome, i due punti, un valore. Una per riga. Maiuscole e minuscole nel nome non contano.' },
+    { t: 'example.com', raw: 'example.com', kind: 'Intestazione', h: 'Il sito che vogliamo', p: 'Lo stesso indirizzo IP può ospitare centinaia di siti. Senza questa riga il server non sa quale servire, e in HTTP/1.1 risponde 400 Bad Request.' },
+    { t: '\\r\\n', raw: '\r\n', crlf: 1, kind: 'Fine riga', h: 'Fine dell\'intestazione', p: 'Stessa coppia di caratteri: chiude la riga Host. Se aggiungessimo altre intestazioni, ognuna finirebbe allo stesso modo.', nl: 1 },
+    { t: '\\r\\n', raw: '\r\n', crlf: 1, kind: 'Riga vuota', h: 'La riga vuota', p: 'Solo \\r\\n, senza nient\'altro davanti. È il segnale che le intestazioni sono finite e il server può rispondere. Senza, resta in attesa.', nl: 1, note: 'riga vuota' }
+  ];
+  const board = $('#board'), detail = $('#detail');
+  let rows = '<div class="row">';
+  TOK.forEach((k, i) => {
+    rows += `<button class="tok${k.crlf ? ' is-crlf' : ''}" type="button" data-i="${i}" aria-pressed="false" tabindex="${i ? -1 : 0}" aria-label="${esc(k.h)}">${k.t}</button>`;
+    if (k.note) rows += `<span class="row-note">← ${k.note}</span>`;
+    if (k.nl) rows += '</div><div class="row">';
+  });
+  board.innerHTML = rows.replace(/<div class="row">$/, '') +
+    `<div class="board-foot"><span>16 + 19 + 2 = 37 byte</span><label class="switch" for="showCrlf"><input type="checkbox" id="showCrlf" checked><i></i>Mostra i caratteri invisibili</label></div>`;
+  const toks = $$('.tok', board);
+  const hex = s => [...new TextEncoder().encode(s)].map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+  function select(i, focus) {
+    toks.forEach((t, j) => { t.setAttribute('aria-pressed', j === i); t.tabIndex = j === i ? 0 : -1; });
+    const k = TOK[i];
+    detail.classList.remove('swap'); void detail.offsetWidth; detail.classList.add('swap');
+    detail.innerHTML = `<p class="detail-kind">${k.kind}</p><h3>${esc(k.h)}</h3><p>${esc(k.p)}</p>
+      <p class="hex">${byteLen(k.raw)} byte sul cavo · esadecimale <b>${hex(k.raw)}</b></p>`;
+    if (focus) toks[i].focus();
+  }
+  board.addEventListener('click', e => { const t = e.target.closest('.tok'); if (t) select(+t.dataset.i); });
+  board.addEventListener('keydown', e => { // roving tabindex con le frecce
+    const t = e.target.closest('.tok'); if (!t) return; const i = +t.dataset.i;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); select((i + 1) % TOK.length, true); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); select((i - 1 + TOK.length) % TOK.length, true); }
+  });
+  $('#showCrlf').addEventListener('change', e => board.classList.toggle('hide-crlf', !e.target.checked));
+  select(0);
+})();
+
+/* ==========================================================================
+   Laboratorio: compone la richiesta e simula la risposta del server
+   ========================================================================== */
+(() => {
+  const host = $('#labHost'), path = $('#labPath'), hostLine = $('#labHostLine'), blank = $('#labBlank');
+  const out = $('#labOut'), state = $('#labState'), send = $('#labSend');
+  const HTTPS_ONLY = ['wikipedia.org', 'www.wikipedia.org', 'github.com', 'www.github.com'];
+  const PRESETS = [
+    { n: 'Tutto giusto', v: ['example.com', '/', true, true] },
+    { n: 'Pagina inesistente', v: ['example.com', '/pagina-che-non-esiste', true, true] },
+    { n: 'Senza Host', v: ['example.com', '/', false, true] },
+    { n: 'Senza riga vuota', v: ['example.com', '/', true, false] },
+    { n: 'Sito solo https', v: ['www.wikipedia.org', '/', true, true] }
+  ];
+  let run = 0;
+
+  const build = () => {
+    let r = `GET ${path.value} HTTP/1.1\r\n`;
+    if (hostLine.checked) r += `Host: ${host.value}\r\n`;
+    if (blank.checked) r += '\r\n';
+    return r;
+  };
+  function preview() {
+    const req = build(); let html = '';
+    req.split('\r\n').slice(0, -1).forEach(l => { html += `<div class="rl${l === '' ? ' rl-blank' : ''}">${esc(l)}${CRLF}</div>`; });
+    if (!hostLine.checked) html += '<div class="missing">✗ riga Host non inviata</div>';
+    if (!blank.checked) html += '<div class="missing">✗ riga vuota non inviata</div>';
+    $('#labRaw').innerHTML = html; $('#labBytes').textContent = `${byteLen(req)} byte`;
+    const flags = (hostLine.checked ? '' : ' --senza-host') + (blank.checked ? '' : ' --senza-riga-vuota');
+    $('#eqPy').textContent = `python3 client_http.py ${host.value || 'example.com'} ${path.value || '/'}${flags}`;
+    $('#eqCurl').textContent = `curl -v ${hostLine.checked ? '' : '-H "Host:" '}http://${host.value || 'example.com'}${path.value.startsWith('/') ? path.value : '/' + path.value}`;
+    $$('#presets .chip').forEach((c, i) => { const v = PRESETS[i].v; c.setAttribute('aria-pressed', host.value === v[0] && path.value === v[1] && hostLine.checked === v[2] && blank.checked === v[3]); });
+  }
+  $('#presets').innerHTML = PRESETS.map((p, i) => `<button class="chip" type="button" data-p="${i}" aria-pressed="false">${p.n}</button>`).join('');
+  $('#presets').addEventListener('click', e => {
+    const b = e.target.closest('[data-p]'); if (!b) return; const v = PRESETS[+b.dataset.p].v;
+    host.value = v[0]; path.value = v[1]; hostLine.checked = v[2]; blank.checked = v[3]; preview();
+  });
+  [host, path, hostLine, blank].forEach(el => el.addEventListener('input', preview));
+
+  /* Il "server": decide la risposta con le stesse regole di un server HTTP/1.1 */
+  function simulate() {
+    const h = host.value.trim(), p = path.value;
+    if (!h || /[\/:\s]/.test(h.replace(/:\d+$/, ''))) return { kind: 'dns' };
+    if (!blank.checked) return { kind: 'timeout' };
+    const page = (title, text) => `<!doctype html>\n<html><head><title>${title}</title></head>\n<body><h1>${title}</h1><p>${text}</p></body></html>\n`;
+    let status, cls = '', body, extra = [];
+    if (!hostLine.checked) { status = '400 Bad Request'; cls = 'bad'; body = page('400 Bad Request', 'Manca la riga Host.'); }
+    else if (!p.startsWith('/') || /\s/.test(p)) { status = '400 Bad Request'; cls = 'bad'; body = page('400 Bad Request', 'La riga di richiesta non è valida.'); }
+    else if (HTTPS_ONLY.includes(h.toLowerCase())) { status = '301 Moved Permanently'; cls = 'warn'; body = ''; extra = [['Location', `https://${h}${p}`]]; }
+    else if (p === '/' || p === '/index.html') { status = '200 OK'; body = page('Pagina di esempio', `Ciao da ${h}: questa è la pagina principale.`); }
+    else { status = '404 Not Found'; cls = 'bad'; body = page('404 Not Found', `Su ${h} non esiste ${p}.`); }
+    const headers = [['Date', new Date().toUTCString()], ['Server', 'simulatore-didattico'], ...extra];
+    if (body) headers.push(['Content-Type', 'text/html; charset=UTF-8']);
+    headers.push(['Content-Length', String(byteLen(body))]);
+    return { kind: 'ok', status, cls, headers, body };
+  }
+  async function fly(back) { // il pacchetto corre sul cavo (solo transform + opacity)
+    const pk = $('#packet'), w = $('#wireLine').clientWidth - pk.offsetWidth;
+    pk.classList.toggle('back', back);
+    const from = back ? w : 0, to = back ? 0 : w;
+    const a = pk.animate([{ transform: `translateX(${from}px) scale(.4)`, opacity: 0 }, { transform: `translateX(${from}px) scale(1)`, opacity: 1, offset: .12 }, { transform: `translateX(${to}px) scale(1)`, opacity: 1, offset: .88 }, { transform: `translateX(${to}px) scale(.4)`, opacity: 0 }], { duration: reduced ? 1 : 950, easing: 'cubic-bezier(.65,0,.35,1)' });
+    await a.finished.catch(() => {});
+  }
+  const line = (cls, html) => { const d = document.createElement('div'); d.className = 'l ' + cls; d.innerHTML = html; out.append(d); out.scrollTop = out.scrollHeight; return d; };
+
+  $('#labForm').addEventListener('submit', async e => {
+    e.preventDefault(); const me = ++run; const alive = () => me === run;
+    send.disabled = true; out.innerHTML = ''; const res = simulate();
+    if (res.kind === 'dns') {
+      state.textContent = 'errore prima ancora di connettersi';
+      line('err', 'socket.gaierror: [Errno -2] Name or service not known');
+      line('dim', 'Il nome non si può risolvere. Nel campo Host va solo il nome');
+      line('dim', 'del sito (example.com), senza http:// e senza barre.');
+      send.disabled = false; return;
+    }
+    state.textContent = 'connessione TCP alla porta 80…'; $('#nodeC').classList.add('live');
+    await fly(false); if (!alive()) return;
+    $('#nodeC').classList.remove('live'); $('#nodeS').classList.add('live');
+    if (res.kind === 'timeout') {
+      state.textContent = 'il server sta aspettando…';
+      line('dim', 'Il server ha ricevuto le righe, ma non la riga vuota:');
+      line('dim', 'per lui le intestazioni non sono ancora finite.');
+      const w = line('', '<div class="wait"><b></b></div>'); const c = line('dim', 'attesa: 0 s');
+      for (let s = 1; s <= 5; s++) { await sleep(1000); if (!alive()) return; c.textContent = `attesa: ${s} s`; }
+      w.remove(); $('#nodeS').classList.remove('live');
+      line('err', '(nessun byte ricevuto)');
+      line('end', 'Nessuna fine: il server non ha mandato nulla per 5 secondi');
+      state.textContent = 'timeout del client'; send.disabled = false; return;
+    }
+    state.textContent = 'il server risponde…'; await sleep(reduced ? 0 : 350); if (!alive()) return;
+    await fly(true); if (!alive()) return; $('#nodeS').classList.remove('live');
+    const step = reduced ? 0 : 70;
+    line('st ' + res.cls, 'HTTP/1.1 ' + esc(res.status)); await sleep(step * 3);
+    for (const [k, v] of res.headers) { if (!alive()) return; line('h', `<b>${k}:</b> ${esc(v)}`); await sleep(step); }
+    line('dim', '(riga vuota: fine delle intestazioni)'); await sleep(step * 2);
+    for (const l of res.body.split('\n').filter(Boolean)) { if (!alive()) return; line('', esc(l)); await sleep(step); }
+    const n = res.headers.at(-1)[1];
+    line('end', `Fine capita con Content-Length: ${n} byte`);
+    state.textContent = res.status; send.disabled = false;
+  });
+  preview();
+})();
+
+/* ==========================================================================
+   Dimostrazione: passi dello script e filtro sulle righe di curl
+   ========================================================================== */
+(() => {
+  const code = $('#pyCode'), lines = $$('.ln', code), btns = $$('#walk button');
+  btns.forEach(b => b.addEventListener('click', () => {
+    const on = b.getAttribute('aria-pressed') !== 'true';
+    btns.forEach(x => x.setAttribute('aria-pressed', 'false')); lines.forEach(l => l.classList.remove('hot'));
+    code.classList.toggle('focus', on);
+    if (on) { b.setAttribute('aria-pressed', 'true'); b.dataset.lines.split(',').forEach(n => lines[+n - 1].classList.add('hot')); }
+  }));
+  const curl = $('#curlCode'), cl = $$('.ln', curl);
+  const NOTES = {
+    all: 'Versione di curl, lunghezza e intestazioni cambiano da un giorno all\'altro. Le righe con <code>&gt;</code> sono le nostre tre righe, più due intestazioni che curl aggiunge da solo.',
+    gt: 'Quello che curl <strong>scrive</strong> sul socket. È la nostra richiesta: <code>User-Agent</code> e <code>Accept</code> sono facoltative. L\'ultima riga con il solo <code>&gt;</code> è la riga vuota.',
+    lt: 'Quello che il server <strong>risponde</strong>: riga di stato e intestazioni. Anche qui una riga vuota le separa dal corpo, che curl stampa senza prefisso.',
+    star: 'Commenti di curl, <strong>non</strong> viaggiano sulla rete. Raccontano la connessione TCP: «left intact» significa che il server non l\'ha chiusa, perché la fine è stata capita con <code>Content-Length</code>.'
+  };
+  $('#curlFilters').addEventListener('click', e => {
+    const b = e.target.closest('[data-f]'); if (!b) return; const f = b.dataset.f;
+    $$('#curlFilters .chip').forEach(c => c.setAttribute('aria-pressed', c === b));
+    curl.classList.toggle('focus', f !== 'all'); cl.forEach(l => l.classList.toggle('hot', l.dataset.k === f));
+    $('#curlNote').innerHTML = NOTES[f];
+  });
+})();
+
+/* ==========================================================================
+   Esercizio: cinque domande con spiegazione
+   ========================================================================== */
+(() => {
+  const TRIALS = [
+    { k: 'A', t: 'Cambia il percorso', s: 'Chiedi una pagina che non esiste.',
+      q: 'Chiedi a example.com il percorso /pagina-che-non-esiste. Che cosa ti aspetti?', o: ['La connessione fallisce: il socket non si apre.', 'La connessione riesce, ma la prima riga della risposta dice 404 Not Found.', 'Il server non risponde e lo script si arrende dopo 5 secondi.'], a: 1,
+      why: '<b>La connessione TCP funziona benissimo:</b> il server riceve la richiesta e risponde. È la risposta a dire che quella risorsa non c\'è, con il codice <code>404</code>. Rete e protocollo HTTP sono due livelli diversi.' },
+    { k: 'B', t: 'Cambia l\'host', s: 'Prima un sito in http, poi uno che vuole solo https.',
+      q: 'Che cosa risponde, sulla porta 80, un sito che accetta solo https?', o: ['La stessa pagina che vedi nel browser, con 200 OK.', 'Un 301 Moved Permanently, con l\'intestazione Location che punta a https://…', 'Niente: sulla porta 80 non ascolta nessuno.'], a: 1,
+      why: '<b>Ti reindirizza.</b> Il server risponde <code>301</code> e nell\'intestazione <code>Location</code> scrive l\'indirizzo <code>https://</code>. Il browser lo segue da solo; il nostro script no, si limita a stampare. Lì servirebbe la porta 443 e la cifratura TLS.' },
+    { k: 'C', t: 'Togli la riga Host', s: 'La richiesta resta di due righe: GET e riga vuota.',
+      q: 'Invii la riga GET e la riga vuota, senza Host. Che cosa risponde il server?', o: ['La pagina normale: Host è facoltativa.', '400 Bad Request: in HTTP/1.1 la riga Host è obbligatoria.', 'Non risponde, aspetta che arrivi Host.'], a: 1,
+      why: '<b>400 Bad Request.</b> La richiesta è completa (la riga vuota c\'è), quindi il server risponde subito. Ma senza <code>Host</code> non sa quale dei siti ospitati su quell\'indirizzo vogliamo, e lo standard HTTP/1.1 gli impone di rifiutare.' },
+    { k: 'D', t: 'Togli la riga vuota', s: 'La richiesta si ferma dopo la riga Host.',
+      q: 'Invii GET e Host, ma non la riga vuota finale. Che cosa succede?', o: ['400 Bad Request immediato.', 'La pagina arriva lo stesso.', 'Il server resta in attesa; dopo 5 secondi lo script si arrende.'], a: 2,
+      why: '<b>Silenzio.</b> Per il server le intestazioni non sono finite: potrebbe arrivarne un\'altra. Aspetta. Lo script ha un timeout di 5 secondi e stampa «nessuna fine». Alcuni server, dopo un po\', chiudono loro la connessione, a volte con un <code>408 Request Timeout</code>.' },
+    { k: 'E', t: 'Rifallo con curl', s: 'La stessa prova, ma con uno strumento vero.',
+      q: 'Nel comando curl -v -H "Host:" http://example.com/ a che cosa serve l\'opzione -H "Host:" ?', o: ['Dice a curl di non inviare la riga Host.', 'Aggiunge una seconda riga Host.', 'Mostra solo l\'intestazione Host della risposta.'], a: 0,
+      why: '<b>La toglie.</b> Un\'intestazione con il nome e nessun valore dice a curl di non mandarla. Tra le righe con <code>&gt;</code> non troverai più <code>Host</code>, e il risultato è lo stesso <code>400</code> della prova C: il server non distingue chi ha scritto quei byte.' }
+  ];
+  let st = store.get('esercizio', {}); const box = $('#trials');
+  function render() {
+    box.innerHTML = TRIALS.map((t, i) => {
+      const s = st[t.k] || {}; const ans = s.ans;
+      return `<article class="trial reveal${s.open || (i === 0 && s.open === undefined) ? ' open' : ''}${ans !== undefined ? ' done' : ''}" data-k="${t.k}">
+        <button class="trial-h" type="button" aria-expanded="${!!(s.open || (i === 0 && s.open === undefined))}" aria-controls="tb-${t.k}">
+          <span class="letter" aria-hidden="true">${t.k}</span><span><h3>${t.t}</h3><small>${t.s}</small></span><span class="plus" aria-hidden="true"></span>
+        </button>
+        <div class="trial-b" id="tb-${t.k}">
+          <p class="q">${t.q}</p>
+          <div class="opts">${t.o.map((o, j) => `<button class="opt${ans !== undefined ? (j === t.a ? ' right' : j === ans ? ' wrong' : ' fade') : ''}" type="button" data-j="${j}" data-k="${'abc'[j]}" ${ans !== undefined ? 'disabled' : ''}>${o}</button>`).join('')}</div>
+          ${ans !== undefined ? `<p class="why">${t.why}</p>` : '<p class="note">Scegli una risposta per vedere la spiegazione.</p>'}
+        </div></article>`;
+    }).join('');
+    const n = TRIALS.filter(t => st[t.k]?.ans !== undefined).length;
+    $('#exCount').textContent = `${n} di ${TRIALS.length} domande risposte`; $('#exBar').style.setProperty('--p', n / TRIALS.length);
+  }
+  const upd = (k, o) => { st[k] = { ...(st[k] || {}), ...o }; store.set('esercizio', st); };
+  box.addEventListener('click', e => {
+    const tr = e.target.closest('.trial'); if (!tr) return; const k = tr.dataset.k;
+    if (e.target.closest('.trial-h')) { const open = !tr.classList.contains('open'); tr.classList.toggle('open', open); tr.querySelector('.trial-h').setAttribute('aria-expanded', open); upd(k, { open }); return; }
+    const o = e.target.closest('.opt'); if (o && !o.disabled) { upd(k, { ans: +o.dataset.j, open: true }); render(); }
+  });
+  $('#exReset').addEventListener('click', () => { st = {}; store.set('esercizio', st); render(); });
+  render();
+})();
+
+/* ==========================================================================
+   Spiegazione: come finisce la risposta (Content-Length o chiusura)
+   ========================================================================== */
+(() => {
+  const N = 24; let mode = 'len', run = 0;
+  const cells = $('#cells'), head = $('#streamHead'), stEl = $('#streamSt'), go = $('#streamGo');
+  function reset() {
+    run++; go.disabled = false; stEl.className = 'stream-st';
+    cells.innerHTML = Array.from({ length: N + (mode === 'close' ? 1 : 0) }, () => '<i class="cell"><span></span></i>').join('');
+    head.innerHTML = mode === 'len'
+      ? `HTTP/1.1 200 OK${CRLF}<br><span class="hl">Content-Length: ${N}</span>${CRLF}<br>${CRLF}`
+      : `HTTP/1.0 200 OK${CRLF}<br>Content-Type: text/html${CRLF}<br>${CRLF}`;
+    stEl.textContent = mode === 'len'
+      ? `Il server ha dichiarato ${N} byte di corpo. Il client sa già quanti aspettarne.`
+      : 'Nessuna lunghezza dichiarata. Il client non sa quanti byte arriveranno.';
+  }
+  $$('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode; $$('[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b)); reset(); }));
+  go.addEventListener('click', async () => {
+    reset(); const me = run; go.disabled = true; const cs = $$('.cell', cells);
+    for (let i = 0; i < N; i++) {
+      await sleep(reduced ? 0 : 85); if (me !== run) return; cs[i].classList.add('on');
+      stEl.textContent = mode === 'len' ? `recv() → letti ${i + 1} di ${N} byte` : `recv() → letti ${i + 1} byte… ne arriveranno altri?`;
+    }
+    await sleep(reduced ? 0 : 500); if (me !== run) return;
+    if (mode === 'close') { cs[N].classList.add('on', 'fin'); cs[N].firstChild.textContent = 'FIN'; stEl.textContent = "recv() → b''  ·  Zero byte: il server ha chiuso la connessione. La risposta è finita."; }
+    else stEl.textContent = `Letti ${N} di ${N}: ho contato i byte, la risposta è finita. La connessione può restare aperta per un'altra richiesta.`;
+    stEl.classList.add('fin'); go.disabled = false; go.textContent = 'Ricevi di nuovo';
+  });
+  reset();
+})();
+
+/* ==========================================================================
+   Quiz finale
+   ========================================================================== */
+(() => {
+  const Q = [
+    { q: 'Con quali caratteri termina ogni riga di una richiesta HTTP?', o: ['Solo \\n', '\\r\\n', 'Un punto e virgola', 'Uno spazio'], a: 1, why: 'Carriage return e line feed, in quest\'ordine: byte 13 e byte 10.' },
+    { q: 'Che cosa comunica al server la riga vuota?', o: ['Che la connessione va chiusa', 'Che le intestazioni sono finite', 'Che il corpo della risposta è vuoto', 'Niente, è solo per leggibilità'], a: 1, why: 'TCP non ha confini tra i messaggi: la riga vuota è il segnale che il server può rispondere.' },
+    { q: 'Invii la richiesta senza la riga vuota finale. Che cosa succede?', o: ['400 Bad Request immediato', 'Il server risponde lo stesso', 'Il server resta in attesa di altre intestazioni', 'Il socket non si apre'], a: 2, why: 'Per il server la richiesta non è ancora completa. Finisce quando scatta un timeout, il nostro o il suo.' },
+    { q: 'In HTTP/1.1, una richiesta completa ma senza la riga Host riceve di solito…', o: ['200 OK', '301 Moved Permanently', '404 Not Found', '400 Bad Request'], a: 3, why: 'Host è l\'unica intestazione obbligatoria: senza, il server non sa quale sito servire.' },
+    { q: 'La risposta contiene «Content-Length: 513». Come capisce il client di aver finito?', o: ['Legge esattamente 513 byte di corpo', 'Aspetta 513 millisecondi', 'Legge 513 righe', 'Aspetta che il server chiuda'], a: 0, why: 'Conta i byte del corpo, dopo la riga vuota. Arrivato a 513 ha finito, anche a connessione aperta.' },
+    { q: 'Nessun Content-Length e nessun chunked. Come finisce la risposta?', o: ['Con una riga vuota', 'Con la parola END', 'Il server chiude la connessione', 'Non può finire'], a: 2, why: 'Il client legge finché recv() restituisce zero byte: segno che l\'altro capo ha chiuso.' },
+    { q: 'Nell\'output di «curl -v», le righe che iniziano con > sono…', o: ['Le intestazioni della risposta', 'La richiesta che curl ha inviato', 'I commenti di curl', 'Il corpo della pagina'], a: 1, why: '> è ciò che parte, < è ciò che arriva, * sono le note di curl sulla connessione.' },
+    { q: 'Perché usiamo la porta 80 e non un sito in https?', o: ['La porta 80 è più veloce', 'Python non supporta https', 'https usa la porta 443 e cifra tutto con TLS', 'I siti https non usano HTTP'], a: 2, why: 'Dentro TLS viaggia lo stesso testo HTTP, ma cifrato: non si può scrivere a mano con un semplice socket.' }
+  ];
+  const card = $('#quizCard'); let i = 0, res = [];
+  const dots = () => `<div class="dots" aria-hidden="true">${Q.map((_, j) => `<i class="${j < res.length ? (res[j] ? 'ok' : 'ko') : j === i ? 'cur' : ''}"></i>`).join('')}</div>`;
+  function ask() {
+    const q = Q[i];
+    card.innerHTML = `<div class="quiz-top"><span>Domanda ${i + 1} di ${Q.length}</span><span>Punti ${res.filter(Boolean).length}</span></div>${dots()}
+      <div class="quiz-body"><h3 class="quiz-q" tabindex="-1">${esc(q.q)}</h3>
+      <div class="opts">${q.o.map((o, j) => `<button class="opt" type="button" data-j="${j}" data-k="${'abcd'[j]}">${esc(o)}</button>`).join('')}</div>
+      <div id="quizAfter"></div></div>`;
+  }
+  function end() {
+    const n = res.filter(Boolean).length;
+    const msg = n === Q.length ? 'Perfetto. Potresti scrivere un browser.' : n >= 6 ? 'Molto bene: il protocollo è chiaro.' : n >= 4 ? 'Ci siamo quasi. Riguarda la spiegazione e riprova.' : 'Da ripassare: riparti dall\'anatomia della richiesta.';
+    card.innerHTML = `<div class="quiz-top"><span>Risultato</span><span>${Q.length} domande</span></div>${dots()}
+      <div class="quiz-body"><p class="score" tabindex="-1">${n}<small> / ${Q.length}</small></p><p class="quiz-q" style="margin-top:1rem">${msg}</p>
+      <ul class="review">${Q.map((q, j) => `<li><span class="${res[j] ? 'ok' : 'ko'}">${res[j] ? '✓' : '✗'}</span><span>${esc(q.q)}${res[j] ? '' : ` <em>→ ${esc(q.o[q.a])}</em>`}</span></li>`).join('')}</ul>
+      <span class="btn-wrap"><button class="btn" type="button" id="quizAgain">Rifai il quiz</button></span></div>`;
+    $('.score', card).focus({ preventScroll: true });
+  }
+  card.addEventListener('click', e => {
+    const o = e.target.closest('.opt');
+    if (o && !o.disabled) {
+      const q = Q[i], j = +o.dataset.j, ok = j === q.a; res.push(ok);
+      $$('.opt', card).forEach((b, k) => { b.disabled = true; b.classList.add(k === q.a ? 'right' : k === j ? 'wrong' : 'fade'); });
+      $('#quizAfter').innerHTML = `<p class="why" style="margin-top:1.1rem"><b>${ok ? 'Esatto.' : 'Non proprio.'}</b> ${esc(q.why)}</p>
+        <div class="quiz-next"><span class="btn-wrap"><button class="btn" type="button" id="quizNext">${i === Q.length - 1 ? 'Vedi il punteggio' : 'Prossima domanda'} <span aria-hidden="true">→</span></button></span></div>`;
+      $('#quizNext').focus({ preventScroll: true });
+    }
+    if (e.target.closest('#quizNext')) { i++; if (i < Q.length) { ask(); $('.quiz-q', card).focus({ preventScroll: true }); } else end(); }
+    if (e.target.closest('#quizAgain')) { i = 0; res = []; ask(); $('.quiz-q', card).focus({ preventScroll: true }); }
+  });
+  ask();
+})();
+
+/* ==========================================================================
+   Glossario con ricerca e filtri
+   ========================================================================== */
+(() => {
+  const G = [
+    ['Socket', 'Rete', 'Una delle due estremità di una connessione di rete. In Python si apre con socket.create_connection((host, porta)); da lì in poi si scrivono e si leggono byte.'],
+    ['TCP', 'Rete', 'Il protocollo di trasporto su cui viaggia HTTP. Consegna un flusso di byte ordinato e affidabile, ma senza confini tra un messaggio e l\'altro.'],
+    ['Porta 80', 'Rete', 'La porta standard di HTTP in chiaro. Tutto quello che ci scrivi viaggia leggibile.'],
+    ['Porta 443 e HTTPS', 'Rete', 'La porta di HTTPS: lo stesso HTTP, ma dentro un canale cifrato con TLS. Per questo non si può scrivere a mano con un semplice socket.'],
+    ['DNS', 'Rete', 'Il servizio che traduce un nome come example.com in un indirizzo IP. create_connection lo interroga per noi prima di connettersi.'],
+    ['GET', 'Richiesta', 'Il metodo più comune: chiede al server di mandare una risorsa. È la prima parola della richiesta.'],
+    ['Percorso', 'Richiesta', 'La parte dopo il metodo: indica quale risorsa vogliamo. «/» è la pagina principale del sito.'],
+    ['HTTP/1.1', 'Richiesta', 'La versione del protocollo usata nella lezione. Rispetto alla 1.0 rende obbligatoria la riga Host e tiene aperta la connessione.'],
+    ['Intestazione (header)', 'Richiesta', 'Una riga nella forma Nome: valore che aggiunge informazioni alla richiesta o alla risposta.'],
+    ['Host', 'Richiesta', 'L\'intestazione che dice quale sito vogliamo. Obbligatoria in HTTP/1.1, perché un solo indirizzo IP può ospitare molti siti.'],
+    ['\\r\\n (CRLF)', 'Richiesta', 'Carriage return (byte 13) più line feed (byte 10). Chiude ogni riga di richieste e risposte HTTP.'],
+    ['Riga vuota', 'Richiesta', 'Un \\r\\n subito dopo un altro \\r\\n. Segna la fine delle intestazioni, sia nella richiesta sia nella risposta.'],
+    ['Riga di stato', 'Risposta', 'La prima riga della risposta: versione, codice numerico e una breve frase, per esempio HTTP/1.1 200 OK.'],
+    ['200 OK', 'Risposta', 'La richiesta è andata a buon fine: nel corpo c\'è la risorsa chiesta.'],
+    ['301 Moved Permanently', 'Risposta', 'La risorsa si è trasferita. Il nuovo indirizzo è nell\'intestazione Location: spesso è lo stesso sito in https.'],
+    ['400 Bad Request', 'Risposta', 'Il server non accetta la richiesta perché è scritta male. È la risposta tipica quando manca Host.'],
+    ['404 Not Found', 'Risposta', 'Il server ha capito la richiesta, ma a quel percorso non c\'è niente.'],
+    ['Content-Length', 'Risposta', 'L\'intestazione con cui il server dichiara quanti byte è lungo il corpo. Il client li conta per sapere quando ha finito.'],
+    ['Chiusura della connessione', 'Risposta', 'L\'altro modo di segnalare la fine: il server chiude il socket e recv() restituisce zero byte.'],
+    ['Transfer-Encoding: chunked', 'Risposta', 'Il corpo arriva a pezzi, ognuno preceduto dalla propria lunghezza; un pezzo lungo zero chiude. Lo script della lezione non lo gestisce.'],
+    ['sendall()', 'Strumenti', 'Il metodo del socket che spedisce tutti i byte passati, ripetendo l\'invio finché non sono partiti tutti.'],
+    ['recv()', 'Strumenti', 'Il metodo del socket che legge i byte arrivati, fino al massimo indicato. Se restituisce b\'\' la connessione è stata chiusa.'],
+    ['Timeout', 'Strumenti', 'Il tempo massimo di attesa. Lo script aspetta 5 secondi: se non arriva nulla smette di leggere.'],
+    ['curl -v', 'Strumenti', 'Un client HTTP da riga di comando. Con -v mostra la richiesta inviata (>), le intestazioni ricevute (<) e le proprie note (*).'],
+    ['Codespace', 'Strumenti', 'L\'ambiente di sviluppo di GitHub nel browser, con terminale, Python e curl già pronti.']
+  ];
+  const cats = ['Tutte', ...new Set(G.map(g => g[1]))]; let cat = 'Tutte';
+  $('#glossCats').innerHTML = cats.map(c => `<button class="chip" type="button" data-c="${c}" aria-pressed="${c === cat}">${c}</button>`).join('');
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  function draw() {
+    const q = norm($('#glossQ').value.trim());
+    const hits = G.filter(g => (cat === 'Tutte' || g[1] === cat) && (!q || norm(g[0] + ' ' + g[2]).includes(q)));
+    $('#terms').innerHTML = hits.map(g => `<div class="term"><dt><span>${esc(g[0])}</span><small>${g[1]}</small></dt><dd>${esc(g[2])}</dd></div>`).join('');
+    $('#glossEmpty').hidden = hits.length > 0;
+    $('#glossCount').textContent = `${hits.length} ${hits.length === 1 ? 'voce' : 'voci'} su ${G.length}`;
+  }
+  $('#glossQ').addEventListener('input', draw);
+  $('#glossCats').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (!b) return; cat = b.dataset.c; $$('#glossCats .chip').forEach(c => c.setAttribute('aria-pressed', c === b)); draw(); });
+  draw();
+})();
+</script>
+<!--BODY-END-->
+</body>
+</html>
