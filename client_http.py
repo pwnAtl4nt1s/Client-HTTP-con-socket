@@ -11,6 +11,7 @@ porta = int(porta) if porta else 80
 righe = [f"GET {percorso} HTTP/1.1"]
 if "--senza-host" not in opzioni:
     righe.append(f"Host: {host}")
+righe.append("User-Agent: client-didattico")
 richiesta = "".join(riga + "\r\n" for riga in righe)
 if "--senza-riga-vuota" not in opzioni:
     richiesta += "\r\n"
