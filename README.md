@@ -10,7 +10,7 @@ un socket TCP, per mostrare come funziona davvero il protocollo.
 
 ## La lezione interattiva
 
-Apri **[`index.html`](index.html)**: è la pagina che accompagna la lezione, con
+Apri **[`Lezione.html`](Lezione.html)**: è la pagina che accompagna la lezione, con
 la richiesta smontata pezzo per pezzo, un simulatore, le domande
 dell'esercizio, il quiz finale e il glossario.
 
@@ -24,7 +24,7 @@ Sul tuo computer basta un doppio clic sul file.
 
 | File | A cosa serve |
 |---|---|
-| `index.html` | La lezione interattiva |
+| `Lezione.html` | La lezione interattiva |
 | `client_http.py` | Lo stesso client, con argomenti e lettura completa della risposta |
 
 ## Indice
@@ -78,7 +78,7 @@ python3 client_http.py [host] [percorso] [opzioni]
 | Parte | Esempio | Se la ometti |
 |---|---|---|
 | `host` | `example.com` | `example.com` |
-| `percorso` | `/index.html` | `/` |
+| `percorso` | `/Lezione.html` | `/` |
 | opzione `--senza-host` | | La riga `Host` viene inviata |
 | opzione `--senza-riga-vuota` | | La riga vuota finale viene inviata |
 
